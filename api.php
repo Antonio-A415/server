@@ -3,6 +3,8 @@
  * Backend PHP para sistema de login con verificación
  * Archivo: api.php
  */
+// phpinfo(); 
+
 
 use PHPMailer\PHPMailer\PHPMailer;
 
@@ -48,6 +50,8 @@ define('SMTP_USER', 'cesarcbr1600@gmail.com');
 define('SMTP_PASS', 'ydwf zdag lost eajh');
 
 class LoginSystem {
+
+
     private $pdo;
     
     public function __construct() {
@@ -58,7 +62,7 @@ class LoginSystem {
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
             ]);
         } catch (PDOException $e) {
-            $this->sendResponse(false, 'Error de conexión a la base de datos', [], 500);
+            $this->sendResponse(false, $e->getMessage(), [], 500);
         }
     }
     private function login() {
@@ -244,6 +248,15 @@ public function handleRequest() {
             break;
         case 'cambiar_password':
             $this->cambiarPassword();
+            break;
+        case 'registros':
+            $this->listarPaquetes();
+            break;
+        case 'clientes':
+            $this->listarClientes();
+            break;
+        case 'contratos':
+            $this->listarContratos();
             break;
         default:
             $this->sendResponse(false, 'Acción no válida', [], 400);
@@ -1161,7 +1174,136 @@ private function sendResponse($success, $message, $data = [], $code = 200) {
     exit;
 }
 
+
+private function listarPaquetes(){
+    try {
+        // 1. Preparamos la consulta SQL
+        // Seleccionamos las columnas necesarias. * se usa por simplicidad,
+        // pero es mejor listar solo las columnas que vas a usar.
+        $stmt = $this->pdo->prepare("
+            SELECT *
+            FROM paquetes_internet
+            ORDER BY id DESC
+        ");
+        
+        // 2. Ejecutamos la consulta
+        $stmt->execute();
+        
+        // 3. Obtenemos todos los resultados como un array asociativo
+        $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 4. Verificamos si hay registros
+        if (empty($clientes)) {
+            // Si no hay clientes, respondemos con éxito pero con data vacía
+            $this->sendResponse(true, 'No se encontraron clientes', ['data' => []], 200);
+            return;
+        }
+
+        // 5. Devolvemos la respuesta exitosa con los datos
+        // Usamos el formato 'data' para facilitar la lectura del frontend
+        $this->sendResponse(true, 'Clientes obtenidos correctamente', ['data' => $clientes], 200);
+        
+    } catch (Exception $e) {
+        // Manejo de errores de la base de datos
+        error_log("Error al listar clientes: " . $e->getMessage());
+        $this->sendResponse(false, 'Error interno del servidor al obtener clientes.', [], 500);
+    }
 }
+private function listarClientes(){
+    try {
+        // 1. Preparamos la consulta SQL
+        // Seleccionamos las columnas necesarias. * se usa por simplicidad,
+        // pero es mejor listar solo las columnas que vas a usar.
+        $stmt = $this->pdo->prepare("
+            SELECT *
+            FROM usuarios
+            ORDER BY id DESC
+        ");
+        
+        // 2. Ejecutamos la consulta
+        $stmt->execute();
+        
+        // 3. Obtenemos todos los resultados como un array asociativo
+        $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 4. Verificamos si hay registros
+        if (empty($clientes)) {
+            // Si no hay clientes, respondemos con éxito pero con data vacía
+            $this->sendResponse(true, 'No se encontraron clientes', ['data' => []], 200);
+            return;
+        }
+
+        // 5. Devolvemos la respuesta exitosa con los datos
+        // Usamos el formato 'data' para facilitar la lectura del frontend
+        $this->sendResponse(true, 'Clientes obtenidos correctamente', ['data' => $clientes], 200);
+        
+    } catch (Exception $e) {
+        // Manejo de errores de la base de datos
+        error_log("Error al listar clientes: " . $e->getMessage());
+        $this->sendResponse(false, 'Error interno del servidor al obtener clientes.', [], 500);
+    }
+}
+
+private function listarContratos(){
+    try {
+        // 1. Preparamos la consulta SQL
+        // Seleccionamos las columnas necesarias. * se usa por simplicidad,
+        // pero es mejor listar solo las columnas que vas a usar.
+        $stmt = $this->pdo->prepare("
+SELECT
+    c.id AS contrato_id,
+    u.nombre_user AS cliente,
+    u.correo AS correo_cliente,
+    a.usuario AS administrador,
+    p.nombre AS paquete_contratado,
+    c.fecha_contrato ,
+    c.fecha_cobro AS siguiente_fecha_cobro,
+    c.estado AS estado_contrato,
+    c.duracion AS duracion_meses
+FROM
+    contratos c
+JOIN
+    usuarios u ON c.id_usuario = u.id       
+JOIN
+    administradores a ON c.id_administrador = a.id 
+JOIN
+    paquetes_internet p ON c.id_paquete = p.id     
+LEFT JOIN
+    promociones_temporales pr ON c.id_promocion = pr.id 
+ORDER BY
+    contrato_id ASC
+        ");
+        
+        // 2. Ejecutamos la consulta
+        $stmt->execute();
+        
+        // 3. Obtenemos todos los resultados como un array asociativo
+        $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 4. Verificamos si hay registros
+        if (empty($clientes)) {
+            // Si no hay clientes, respondemos con éxito pero con data vacía
+            $this->sendResponse(true, 'No se encontraron clientes', ['data' => []], 200);
+            return;
+        }
+
+        // 5. Devolvemos la respuesta exitosa con los datos
+        // Usamos el formato 'data' para facilitar la lectura del frontend
+        $this->sendResponse(true, 'Clientes obtenidos correctamente', ['data' => $clientes], 200);
+        
+    } catch (Exception $e) {
+        // Manejo de errores de la base de datos
+        error_log("Error al listar clientes: " . $e->getMessage());
+        $this->sendResponse(false, 'Error interno del servidor al obtener clientes.', [], 500);
+    }
+}
+
+}
+
+
+
+
+
 
 // Inicializar y manejar la petición
 try {
@@ -1175,4 +1317,7 @@ try {
         'timestamp' => date('Y-m-d H:i:s')
     ], JSON_UNESCAPED_UNICODE);
 }
+
+
+
 ?>
