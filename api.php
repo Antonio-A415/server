@@ -10,6 +10,10 @@ use PHPMailer\PHPMailer\PHPMailer;
 
 use PHPMailer\PHPMailer\Exception;
 
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require 'vendor/autoload.php';
 // ✅ AGREGAR AL INICIO DEL ARCHIVO, después de los require
 error_reporting(E_ALL);
@@ -249,7 +253,7 @@ public function handleRequest() {
         case 'cambiar_password':
             $this->cambiarPassword();
             break;
-        case 'registros':
+        case 'paquetes':
             $this->listarPaquetes();
             break;
         case 'clientes':
@@ -258,6 +262,76 @@ public function handleRequest() {
         case 'contratos':
             $this->listarContratos();
             break;
+            case 'buscaradmin':
+    $id = $_GET['id'] ?? $_POST['id'] ?? '';
+    if (empty($id) || !is_numeric($id)) {
+        $this->sendResponse(false, 'ID de administrador inválido o faltante', [], 400);
+        break;
+    }
+    $this->useradmin((int)$id); // Usa (int) para asegurar que sea un entero
+    break;
+    case 'contrato':
+             $id = $_GET['id'] ?? $_POST['id'] ?? '';
+               if (empty($id) || !is_numeric($id)) {
+        $this->sendResponse(false, 'ID de administrador inválido o faltante', [], 400);
+        break;
+    }
+    $this->buscarcontrato((int)$id);
+       break;
+       case 'promociones':
+        $this->listarpromociones();
+        break;
+        case 'paquete':
+    $id = $_GET['id'] ?? $_POST['id'] ?? '';
+    if (empty($id) || !is_numeric($id)) {
+        $this->sendResponse(false, 'ID de paquete inválido o faltante', [], 400);
+        break;
+    }
+    $this->paqueteid((int)$id); // Usa (int) para asegurar que sea un entero
+    break;
+
+
+
+    case 'promocion':
+    $id = $_GET['id'] ?? $_POST['id'] ?? '';
+    if (empty($id) || !is_numeric($id)) {
+        $this->sendResponse(false, 'ID de promocion inválido o faltante', [], 400);
+        break;
+    }
+    $this->promocionid((int)$id); // Usa (int) para asegurar que sea un entero
+    break;
+
+
+    case 'registrar_contrato':
+        $input = json_decode(file_get_contents("php://input"), true);
+       // Convertimos inmediatamente a INT o FLOAT para seguridad en la base de datos.
+    $idusuario        = (int) ($input['id_usuario'] ?? 0);
+    $idadministrador  = (int) ($input['id_administrador'] ?? 0);
+    $idpaquete        = (int) ($input['id_paquete'] ?? 0);
+    $idpromocion      = (int) ($input['id_promocion'] ?? 0); // Si no se envía, es 0 (Sin promo)
+    $duracion         = (int) ($input['duracion'] ?? 0);
+
+    $clausulas        = $input['clausulas'] ?? ''; 
+    $tipopago         =  $input['tipopago'] ?? ''; 
+    $montototal       = (float) ($input['monto_total'] ?? 0.00); // CRÍTICO: Convertir a float
+    
+ //$monto_paquete=(float)();
+   // $monto_descuento =(float)();
+
+    // 2. LLAMAMOS A LA FUNCIÓN DE REGISTRO PASANDO TODOS LOS DATOS
+    // ESTA ES LA MANERA CORRECTA DE QUE LA FUNCIÓN TENGA ACCESO A LOS DATOS.
+    $this->registrocontrato(
+        $idusuario,
+        $idadministrador,
+        $idpaquete,
+        $idpromocion,
+        $duracion,
+        $clausulas,
+        $tipopago,
+        $montototal
+    );
+        break;
+          
         default:
             $this->sendResponse(false, 'Acción no válida', [], 400);
     }
@@ -1298,6 +1372,250 @@ ORDER BY
     }
 }
 
+
+private function useradmin($idadmin){
+    try{
+        // 1. Usa un marcador de posición (el signo '?')
+        $sql = "SELECT * FROM administradores WHERE id = ?";
+        $stmt = $this->pdo->prepare($sql);
+        
+        // 2. Pasa el valor a execute() como un array. ¡Esto previene la Inyección SQL!
+        $stmt->execute([$idadmin]); 
+        
+        $admin = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($admin)) {
+            // Si no se encuentra, la respuesta es clara.
+            $this->sendResponse(true, 'No se encontró al admin', ['data' => []], 200);
+            return;
+        }
+
+        // 3. (OPCIONAL) Si se encuentra, asegúrate de enviar una respuesta con los datos.
+        // Falta la línea para devolver el administrador encontrado.
+        $this->sendResponse(true, 'Admin encontrado', ['data' => $admin], 200); 
+
+    } catch(Exception $e){
+        // ... (El manejo de errores está bien)
+        error_log("Error al encontrar el admin: " . $e->getMessage());
+        $this->sendResponse(false, 'Error interno del servidor al obtener admin', [], 500);
+    }
+}
+
+private function registrocontrato(
+    // 1. La función debe recibir todos los argumentos
+    $idusuario,
+    $idadministrador,
+    $idpaquete,
+    $idpromocion,
+    $duracion,
+    $clausulas,
+    $tipopago,
+    $montototal,
+    
+) {
+    // 2. Definición del detalle del pago. Usaremos las variables recibidas
+    $detallepago = "Pago inicial: Instalación , Paquete ( y Descuento";
+
+    try {
+        $this->pdo->beginTransaction();
+
+        // 3. El SP debe recibir TODOS los datos necesarios.
+        // Asumiendo que el SP tiene 9 campos. Ajusta el número (?) y el nombre del SP si es incorrecto.
+        // Si el SP fuera más completo, podrías enviarle 10+ variables.
+        $stmt = $this->pdo->prepare("
+            CALL CrearNuevoContratoConPago(
+                ?, 
+                ?, 
+                ?, 
+                ?, 
+                ?, 
+                ?, 
+                ?,
+                ?,
+                ?
+            )");
+       
+
+        // Vincula en el mismo orden que el SP espera.
+        $stmt->bindParam(1, $idusuario, PDO::PARAM_INT);
+        $stmt->bindParam(2, $idadministrador, PDO::PARAM_INT);
+        $stmt->bindParam(3, $idpaquete, PDO::PARAM_INT);
+        $stmt->bindParam(4, $idpromocion, PDO::PARAM_INT);
+        $stmt->bindParam(5, $duracion, PDO::PARAM_INT);
+
+        // Si clausulas es texto (por ejemplo JSON o texto), usar STR
+        $stmt->bindParam(6, $clausulas, PDO::PARAM_STR);
+
+        // tipopago probablemente es int o string según tu diseño
+        
+
+        // montototal: si tiene decimales, pásalo como string o float; PDO no tiene PARAM_DECIMAL
+        // puedes usar bindValue si quieres mayor seguridad para tipos no referenciables
+        $stmt->bindParam(7, $montototal, PDO::PARAM_INT);
+$stmt->bindParam(8, $tipopago, PDO::PARAM_STR);
+        // detallepago es texto
+        $stmt->bindParam(9, $detallepago, PDO::PARAM_STR);
+
+
+         $stmt->execute();
+
+     
+
+echo($idusuario);
+echo($idadministrador);
+
+    
+
+       // $contratoId = $this->pdo->lastInsertId();
+
+        // 5. ¡CRÍTICO! Confirmar la transacción
+       // $this->pdo->commit(); 
+
+        // 6. Enviar la respuesta de éxito
+        $this->sendResponse(true, 'Registro guardado con éxito.', ['contrato_id' => "listo"], 200);
+
+    }  catch (PDOException $e) {
+        $this->pdo->rollBack();
+
+        // 👇 Aquí mostramos el error exacto
+        echo json_encode([
+            "error" => true,
+            "message" => $e->getMessage(),
+            "trace" => $e->getTraceAsString()
+        ]);
+        exit;
+    }
+}
+private function buscarcontrato($id){
+        try{
+        // 1. Usa un marcador de posición (el signo '?')
+        $sql = "
+SELECT
+    c.id AS contrato_id,
+    u.nombre_user AS cliente,
+    u.correo AS correo_cliente,
+    a.usuario AS administrador,
+    p.nombre AS paquete_contratado,
+    c.fecha_contrato ,
+    c.fecha_cobro AS siguiente_fecha_cobro,
+    c.estado AS estado_contrato,
+    c.duracion AS duracion_meses
+FROM
+    contratos c
+JOIN
+    usuarios u ON c.id_usuario = u.id       
+JOIN
+    administradores a ON c.id_administrador = a.id 
+JOIN
+    paquetes_internet p ON c.id_paquete = p.id     
+LEFT JOIN
+    promociones_temporales pr ON c.id_promocion = pr.id 
+ WHERE c.id= ?";
+        $stmt = $this->pdo->prepare($sql);
+        
+        // 2. Pasa el valor a execute() como un array. ¡Esto previene la Inyección SQL!
+        $stmt->execute([$id]); 
+        
+        $admin = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+
+        // 3. (OPCIONAL) Si se encuentra, asegúrate de enviar una respuesta con los datos.
+        // Falta la línea para devolver el administrador encontrado.
+        $this->sendResponse(true, 'contrato encontrado', ['data' => $admin], 200); 
+
+    } catch(Exception $e){
+        // ... (El manejo de errores está bien)
+        error_log("Error al encontrar el contrato: " . $e->getMessage());
+        $this->sendResponse(false, 'Error interno del servidor al obtener admin', [], 500);
+    }
+}
+
+
+
+private function listarpromociones(){
+     try {
+        // 1. Preparamos la consulta SQL
+        // Seleccionamos las columnas necesarias. * se usa por simplicidad,
+        // pero es mejor listar solo las columnas que vas a usar.
+        $stmt = $this->pdo->prepare("
+SELECT * FROM promociones_temporales");
+        
+        // 2. Ejecutamos la consulta
+        $stmt->execute();
+        
+        // 3. Obtenemos todos los resultados como un array asociativo
+        $promociones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 4. Verificamos si hay registros
+        if (empty($promociones)) {
+            // Si no hay clientes, respondemos con éxito pero con data vacía
+            $this->sendResponse(true, 'No se encontraron promociones', ['data' => []], 200);
+            return;
+        }
+
+        // 5. Devolvemos la respuesta exitosa con los datos
+        // Usamos el formato 'data' para facilitar la lectura del frontend
+        $this->sendResponse(true, 'Promociones obtenidas correctamente', ['data' => $promociones], 200);
+        
+    } catch (Exception $e) {
+        // Manejo de errores de la base de datos
+        error_log("Error al listar promociones: " . $e->getMessage());
+        $this->sendResponse(false, 'Error interno del servidor al obtener promociones.', [], 500);
+    }
+}
+
+private function paqueteid($idpack){
+    try{
+        // 1. Usa un marcador de posición (el signo '?')
+        $sql = "SELECT * FROM paquetes_internet WHERE id = ?";
+        $stmt = $this->pdo->prepare($sql);
+        
+        // 2. Pasa el valor a execute() como un array. ¡Esto previene la Inyección SQL!
+        $stmt->execute([$idpack]); 
+        
+        $admin = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($admin)) {
+            // Si no se encuentra, la respuesta es clara.
+            $this->sendResponse(true, 'No se encontró al paquete', ['data' => []], 200);
+            return;
+        }
+
+
+        $this->sendResponse(true, 'paquete encontrado', ['data' => $admin], 200); 
+
+    } catch(Exception $e){
+        // ... (El manejo de errores está bien)
+        error_log("Error al encontrar al paquete: " . $e->getMessage());
+        $this->sendResponse(false, 'Error interno del servidor al obtener al paquete', [], 500);
+    }
+}
+private function promocionid($idpack){
+    try{
+        // 1. Usa un marcador de posición (el signo '?')
+        $sql = "SELECT * FROM promociones_temporales WHERE id = ?";
+        $stmt = $this->pdo->prepare($sql);
+        
+        // 2. Pasa el valor a execute() como un array. ¡Esto previene la Inyección SQL!
+        $stmt->execute([$idpack]); 
+        
+        $admin = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($admin)) {
+            // Si no se encuentra, la respuesta es clara.
+            $this->sendResponse(true, 'No se encontró al paquete', ['data' => []], 200);
+            return;
+        }
+
+
+        $this->sendResponse(true, 'paquete encontrado', ['data' => $admin], 200); 
+
+    } catch(Exception $e){
+        // ... (El manejo de errores está bien)
+        error_log("Error al encontrar al paquete: " . $e->getMessage());
+        $this->sendResponse(false, 'Error interno del servidor al obtener al paquete', [], 500);
+    }
+}
 }
 
 
