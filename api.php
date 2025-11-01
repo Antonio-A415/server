@@ -39,9 +39,6 @@ define('DB_NAME', 'app');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 
-// Configuración de Firebase (opcional)
-define('FIREBASE_SERVER_KEY', 'tu_firebase_server_key_aqui');
-
 // Configuración de correo PHP Mailer
 define('SMTP_HOST', 'smtp.gmail.com');
 define('SMTP_USER', 'cesarcbr1600@gmail.com');
